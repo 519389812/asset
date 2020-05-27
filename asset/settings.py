@@ -23,9 +23,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '71(k&nvk2!9f$u3za)xx-+otk$nm-d2)-ai^ri&n!9ett!ry@='
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['asset.pythonanywhere.com']
 
 
 # Application definition
@@ -78,12 +78,22 @@ WSGI_APPLICATION = 'asset.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/3.0/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+#     }
+# }
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-    }
-}
+      'default': {
+          'ENGINE': 'django.db.backends.mysql',
+          'NAME':  'asset$default',
+          'USER': 'asset',
+          'PASSWORD': 'zjss123456',
+          'HOST': 'asset.mysql.pythonanywhere-services.com',
+      }
+  }
 
 
 # Password validation
