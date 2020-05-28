@@ -1,6 +1,11 @@
 from django.contrib import admin
 from record.models import CurrentRecord, CurrentStorage
 from django.contrib import messages
+from io import BytesIO
+import pandas as pd
+import datetime
+from django.http import HttpResponse
+from django.utils import timezone
 
 
 class CurrentRecordAdmin(admin.ModelAdmin):
@@ -12,12 +17,34 @@ class CurrentRecordAdmin(admin.ModelAdmin):
         ("基本信息", {"fields": ["current_name", "quantity", "in_out", "area_name", "comment"]}),
         ("操作信息", {"fields": ["id", "operation_datetime", "operation_username"]}),
     )
+    actions = ["export_directly"]
+    date_hierarchy = 'operation_datetime'  # 详细时间分层筛选
+    list_filter = ("current_name__name", "in_out", "area_name__name", "operation_username",)
 
     def get_readonly_fields(self, request, obj=None):
         if obj is not None:
             return ["id", "current_name", "quantity", "in_out", "area_name", "operation_datetime", "operation_username"]
         else:
             return ["id", "operation_datetime", "operation_username"]
+
+    def export_directly(self, request, queryset):
+        outfile = BytesIO()
+        data = pd.DataFrame(queryset.values())
+        data = data.rename(columns={"id": "序号", "current_name_id": "流动资产名称", "quantity": "数量",
+                                    "in_out": "入出库", "area_name_id": "位置", "operation_datetime": "操作时间",
+                                    "operation_username": "操作人", "comment": "备注"})
+        data = data[["序号", "流动资产名称", "数量", "入出库", "位置", "操作时间", "操作人", "备注"]]
+        data['操作时间'] = (data['操作时间'] + datetime.timedelta(hours=8)).dt.strftime('%Y-%m-%d %H:%M:%S')
+        data = data.sort_values(by=["操作时间"], ascending=True)
+        data = data.fillna("")
+        filename = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        response = HttpResponse(content_type='application/vnd.ms-excel')
+        response['Content-Disposition'] = 'attachment;filename="{}"'.format("Export_Directly " + filename + ".xlsx")
+        data.to_excel(outfile, index=False)
+        response.write(outfile.getvalue())
+        return response
+
+    export_directly.short_description = "导出记录"
 
     def save_model(self, request, obj, form, change):
         try:
@@ -56,6 +83,24 @@ class CurrentStorageAdmin(admin.ModelAdmin):
     search_fields = ("current_name", "room_name", "area_name", "quantity",)
     list_filter = ("current_name", "room_name", "area_name", "quantity",)
     ordering = ("current_name",)
+    actions = ["export_directly"]
+
+    def export_directly(self, request, queryset):
+        outfile = BytesIO()
+        data = pd.DataFrame(queryset.values())
+        data = data.rename(columns={"id": "序号", "current_name": "流动资产名称", "room_name": "所在房间",
+                                    "area_name": "所在位置", "quantity": "库存"})
+        data = data[["流动资产名称", "所在房间", "所在位置", "库存"]]
+        data = data.sort_values(by=["流动资产名称", "所在房间", "所在位置", "库存"], ascending=False)
+        data = data.fillna("")
+        filename = timezone.datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        response = HttpResponse(content_type='application/vnd.ms-excel')
+        response['Content-Disposition'] = 'attachment;filename="{}"'.format("Export_Directly " + filename + ".xlsx")
+        data.to_excel(outfile, index=False)
+        response.write(outfile.getvalue())
+        return response
+
+    export_directly.short_description = "导出记录"
 
 
 admin.site.register(CurrentRecord, CurrentRecordAdmin)
