@@ -6,15 +6,16 @@ import pandas as pd
 import datetime
 from django.http import HttpResponse
 from django.utils import timezone
+from django.utils.html import format_html
 
 
 class CurrentRecordAdmin(admin.ModelAdmin):
     list_display = (
-        "id", "current_name", "quantity", "in_out", "area_name", "operation_datetime", "operation_username", "comment")
+        "id", "current_name", "quantity", "in_out", "area_name", "expiry_date", "operation_datetime", "operation_username", "comment")
     list_display_links = ("id",)
     search_fields = ("current_name__name", "quantity", "in_out", "area_name__name",)
     fieldsets = (
-        ("基本信息", {"fields": ["current_name", "quantity", "in_out", "area_name", "comment"]}),
+        ("基本信息", {"fields": ["current_name", "quantity", "in_out", "area_name", "expiry_date", "comment"]}),
         ("操作信息", {"fields": ["id", "operation_datetime", "operation_username"]}),
     )
     actions = ["export_directly"]
@@ -48,7 +49,8 @@ class CurrentRecordAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         try:
-            storage_record = CurrentStorage.objects.get(current_name=obj.current_name.name, area_name=obj.area_name)
+            storage_record = CurrentStorage.objects.get(current_name=obj.current_name.name, area_name=obj.area_name,
+                                                        expiry_date=obj.expiry_date)
         except:
             storage_record = None
         if storage_record is not None:
@@ -62,6 +64,10 @@ class CurrentRecordAdmin(admin.ModelAdmin):
                 if quantity < 0:
                     messages.set_level(request, level=messages.ERROR)
                     messages.error(request, "错误！出库数量大于库存数。")
+                elif quantity == 0:
+                    storage_record.delete()
+                    obj.operation_username = request.user.full_name
+                    super(CurrentRecordAdmin, self).save_model(request, obj, form, change)
                 else:
                     storage_record.quantity = quantity
                     storage_record.save()
@@ -70,7 +76,8 @@ class CurrentRecordAdmin(admin.ModelAdmin):
         else:
             if obj.in_out == "in":
                 CurrentStorage.objects.create(current_name=obj.current_name.name, room_name=obj.area_name.room.name,
-                                              area_name=obj.area_name.name, quantity=obj.quantity)
+                                              area_name=obj.area_name.name, quantity=obj.quantity,
+                                              expiry_date=obj.expiry_date)
                 obj.operation_username = request.user.full_name
                 super(CurrentRecordAdmin, self).save_model(request, obj, form, change)
             elif obj.in_out == "out":
@@ -79,19 +86,19 @@ class CurrentRecordAdmin(admin.ModelAdmin):
 
 
 class CurrentStorageAdmin(admin.ModelAdmin):
-    list_display = ("id", "current_name", "room_name", "area_name", "quantity",)
+    list_display = ("id", "current_name", "room_name", "area_name", "quantity", "expiry_date", "is_expired")
     search_fields = ("current_name", "room_name", "area_name", "quantity",)
     list_filter = ("current_name", "room_name", "area_name", "quantity",)
-    ordering = ("current_name",)
+    ordering = ("expiry_date", "current_name")
     actions = ["export_directly"]
 
     def export_directly(self, request, queryset):
         outfile = BytesIO()
         data = pd.DataFrame(queryset.values())
         data = data.rename(columns={"id": "序号", "current_name": "流动资产名称", "room_name": "所在房间",
-                                    "area_name": "所在位置", "quantity": "库存"})
-        data = data[["流动资产名称", "所在房间", "所在位置", "库存"]]
-        data = data.sort_values(by=["流动资产名称", "所在房间", "所在位置", "库存"], ascending=False)
+                                    "area_name": "所在位置", "quantity": "库存", "expiry_date": "有效期"})
+        data = data[["流动资产名称", "所在房间", "所在位置", "库存", "有效期"]]
+        data = data.sort_values(by=["有效期", "流动资产名称", "所在房间", "所在位置", "库存"], ascending=False)
         data = data.fillna("")
         filename = timezone.datetime.now().strftime("%Y-%m-%d_%H%M%S")
         response = HttpResponse(content_type='application/vnd.ms-excel')
@@ -101,6 +108,29 @@ class CurrentStorageAdmin(admin.ModelAdmin):
         return response
 
     export_directly.short_description = "导出记录"
+
+    def is_expired(self, obj):
+        if obj.expiry_date is not None:
+            expiry_date = obj.expiry_date + datetime.timedelta(hours=8)
+            if expiry_date < datetime.date.today():
+                ret = '已过期'
+                color_code = 'red'
+            elif (expiry_date - datetime.date.today()).days <= 30:
+                ret = '即将过期'
+                color_code = 'orange'
+            else:
+                ret = '未过期'
+                color_code = 'green'
+        else:
+            ret = '无'
+            color_code = 'black'
+        return format_html(
+            '<span style="color: {};">{}</span>',
+            color_code,
+            ret,
+        )
+
+    is_expired.short_description = '是否过期'
 
 
 admin.site.register(CurrentRecord, CurrentRecordAdmin)

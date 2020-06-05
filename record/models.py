@@ -11,6 +11,7 @@ class CurrentRecord(models.Model):
     area_name = models.ForeignKey(Area, to_field="name", related_name="area_name", on_delete=models.DO_NOTHING,
                                   verbose_name="所在位置")
     in_out = models.CharField(max_length=6, choices=(("in", "入库"), ("out", "出库")), verbose_name="出入库")
+    expiry_date = models.DateTimeField(null=True, verbose_name="有效期")
     operation_datetime = models.DateTimeField(auto_now=True, verbose_name="操作时间")
     operation_username = models.CharField(max_length=16, verbose_name="操作人")
     comment = models.TextField(max_length=200, blank=True, verbose_name="备注")
@@ -29,6 +30,7 @@ class CurrentStorage(models.Model):
     room_name = models.CharField(max_length=20, verbose_name="所在房间")
     area_name = models.CharField(max_length=20, verbose_name="所在位置")
     quantity = models.IntegerField(verbose_name="库存数量")
+    expiry_date = models.DateTimeField(null=True, verbose_name="有效期")
 
     class Meta:
         verbose_name = "流动资产库存"
